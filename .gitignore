@@ -5,3 +5,4 @@ tools/editor/winpy/*
 !tools/editor/winpy/winside.py
 # Creality's display firmware: download it, don't commit it
 TJC_SET/
+dist/
