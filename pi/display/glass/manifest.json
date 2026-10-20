@@ -1,0 +1,162 @@
+{
+ "wallpapers": {
+  "neon-bedgrid": {
+   "pics": {
+    "bg": 0,
+    "glass": 1,
+    "focus": 2
+   },
+   "source": "procedural grid"
+  },
+  "prism-weave": {
+   "pics": {
+    "bg": 3,
+    "glass": 4,
+    "focus": 5
+   },
+   "source": "1000102747.jpg"
+  },
+  "last-light": {
+   "pics": {
+    "bg": 6,
+    "glass": 7,
+    "focus": 8
+   },
+   "source": "1000102748.png"
+  },
+  "rain-cottage": {
+   "pics": {
+    "bg": 9,
+    "glass": 10,
+    "focus": 11
+   },
+   "source": "752e8a6b-0d05-4780-963c-3345abcf1ab5-1_all_26554.jpg"
+  },
+  "ember-peak": {
+   "pics": {
+    "bg": 12,
+    "glass": 13,
+    "focus": 14
+   },
+   "source": "752e8a6b-0d05-4780-963c-3345abcf1ab5-1_all_26556.jpg"
+  },
+  "verdant-drift": {
+   "pics": {
+    "bg": 15,
+    "glass": 16,
+    "focus": 17
+   },
+   "source": "752e8a6b-0d05-4780-963c-3345abcf1ab5-1_all_26558.jpg"
+  }
+ },
+ "pictures": [
+  "neon-bedgrid_bg.png",
+  "neon-bedgrid_glass.png",
+  "neon-bedgrid_focus.png",
+  "prism-weave_bg.png",
+  "prism-weave_glass.png",
+  "prism-weave_focus.png",
+  "last-light_bg.png",
+  "last-light_glass.png",
+  "last-light_focus.png",
+  "rain-cottage_bg.png",
+  "rain-cottage_glass.png",
+  "rain-cottage_focus.png",
+  "ember-peak_bg.png",
+  "ember-peak_glass.png",
+  "ember-peak_focus.png",
+  "verdant-drift_bg.png",
+  "verdant-drift_glass.png",
+  "verdant-drift_focus.png",
+  "boot_rotate_00.png",
+  "boot_rotate_01.png",
+  "boot_rotate_02.png",
+  "boot_rotate_03.png",
+  "boot_rotate_04.png",
+  "boot_rotate_05.png",
+  "boot_rotate_06.png",
+  "boot_rotate_07.png",
+  "boot_rotate_08.png",
+  "boot_rotate_09.png",
+  "boot_rotate_10.png",
+  "boot_rotate_11.png",
+  "boot_rotate_12.png",
+  "boot_rotate_13.png",
+  "boot_rotate_14.png",
+  "boot_rotate_15.png",
+  "boot_rotate_16.png",
+  "boot_rotate_17.png",
+  "boot_morph_0.png",
+  "boot_morph_1.png",
+  "boot_morph_2.png",
+  "boot_morph_3.png",
+  "boot_morph_4.png",
+  "boot_morph_5.png",
+  "boot_morph_6.png",
+  "boot_morph_7.png",
+  "boot_text_0.png",
+  "boot_text_1.png",
+  "boot_text_2.png",
+  "boot_text_3.png"
+ ],
+ "fonts": {
+  "small": 0,
+  "label": 1,
+  "body": 2,
+  "value": 3,
+  "big": 4,
+  "icon": 5,
+  "icon_s": 6
+ },
+ "boot": {
+  "rotate": [
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   25,
+   26,
+   27,
+   28,
+   29,
+   30,
+   31,
+   32,
+   33,
+   34,
+   35
+  ],
+  "morph": [
+   36,
+   37,
+   38,
+   39,
+   40,
+   41,
+   42,
+   43
+  ],
+  "text": [
+   44,
+   45,
+   46,
+   47
+  ],
+  "x": 60,
+  "y": 100,
+  "size": 120,
+  "rise": 8,
+  "dy": 6,
+  "tx": 20,
+  "ty": 186,
+  "bg": [
+   8,
+   12,
+   15
+  ],
+  "dt": 0.06
+ }
+}

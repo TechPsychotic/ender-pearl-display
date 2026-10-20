@@ -1,0 +1,15 @@
+[Unit]
+Description=Ender Pearl on the printer display (our TJC glass firmware on UART3, knob on GPIO19/26/13)
+Wants=ender-loop.service
+After=ender-loop.service
+
+[Service]
+WorkingDirectory=%h/closedloop
+ExecStart=/usr/bin/python3 -u display/glass_main.py
+Restart=always
+RestartSec=5
+StandardOutput=append:%h/closedloop/out/display.log
+StandardError=append:%h/closedloop/out/display.log
+
+[Install]
+WantedBy=default.target
