@@ -6,6 +6,11 @@ The Ender-3 V3 SE has a small 320 × 240 knob-driven screen (a **TJC3224T132_011
 completely: the display runs our own TJC firmware, and a Raspberry Pi 4 draws a modern "glass" interface on it,
 in sync with a web UI that drives the printer.
 
+> **Part of Ender Pearl.** This repository is a subset of the **Ender Pearl** project: a Raspberry Pi host for the
+> Ender-3 V3 SE with its own G-code streamer, web slicer, printer controls and print queue. It holds only the
+> display work: the reverse engineering, our firmware, the Pi display app and the tools to build them. Code from
+> the rest of Ender Pearl appears only where the display depends on it (the display's web API in `server/`).
+
 <p align="center">
   <img src="docs/images/home.png" width="200" alt="Home screen">
   <img src="docs/images/printing.png" width="200" alt="Printing screen">
