@@ -59,6 +59,10 @@ class Mirror:
                 elif op == "line":
                     x0, y0, x1, y1, col = map(int, rest.split(","))
                     d.line((x0, y0, x1, y1), fill=rgb565(col))
+                elif op in ("cir", "cirs"):
+                    cx, cy, r, col = map(int, rest.split(","))
+                    box = (cx - r, cy - r, cx + r, cy + r)
+                    d.ellipse(box, fill=rgb565(col)) if op == "cirs" else d.ellipse(box, outline=rgb565(col))
                 elif op == "xstr":
                     self._xstr(img, rest, pic)
             except (ValueError, IndexError, OSError):

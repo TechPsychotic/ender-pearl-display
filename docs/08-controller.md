@@ -3,9 +3,47 @@
 A GNOME app (GTK 4 / libadwaita) for your PC that reaches the printer's display through the Pi:
 over Wi-Fi to the Ender Pearl web API, and over SSH for the rest.
 
-| Live | Flash | Bench | Service |
+| Live | Design | Flash | Service |
 |---|---|---|---|
-| ![Live](images/controller-live.png) | ![Flash](images/controller-flash.png) | ![Bench](images/controller-bench.png) | ![Service](images/controller-service.png) |
+| ![Live](images/controller-live.png) | ![Design](images/controller-design.png) | ![Flash](images/controller-flash.png) | ![Service](images/controller-service.png) |
+
+## Design: build screens without code
+![Design](images/controller-design.png)
+
+Make a screen for the printer from what is already in the display's firmware (no new firmware, no code):
+- **Elements**, from the **+** menu:
+  - glass panels (normal or focused);
+  - text in five fonts;
+  - any of the 61 icons;
+  - progress bars, filled boxes, lines and circles;
+  - the stored pictures (logo, boot frames).
+
+  The wallpaper is picked in the toolbar.
+- **Editing:**
+  - Drag elements on the screen to move them, and drag the pink corner handle to resize.
+  - Arrow keys nudge (Shift: 10 px), Delete removes, Ctrl+Z / Ctrl+Shift+Z undo and redo, Ctrl+D duplicates.
+  - The list on the right orders them: later elements are drawn on top.
+- **Settings:** each element's position, size, text, font, colour (with the theme's colour presets), alignment,
+  and what is behind it. Text and icons blend with the panel or wallpaper behind them, chosen automatically.
+- **Check:** the designer warns about what the display would do differently from what you'd expect:
+  - text wider than its box (the display wraps it);
+  - a box lower than its font;
+  - characters a font doesn't have;
+  - elements off the screen.
+- **Live on the printer:** switch it on and the real display redraws after every change, in about half a second
+  for a typical screen. It works through the bench, so the Ender Pearl screen pauses until you switch Live off.
+- **What can the display do?** shows every icon and font as the display draws them, plus a plain-language list of
+  the wallpapers, pictures, colours, shapes and limits, and what would need a new firmware.
+
+  ![Capabilities](images/controller-capabilities.png)
+- **Templates:** header and card, big number, tile menu, splash. Each shows a technique you can copy.
+- **Commands:** the exact TJC instructions the screen sends, and the same screen as Python calls on the Pi app's
+  canvas (`c.panel(…)`, `c.text(…)`), to paste into `pi/display/glass/app.py`.
+- **Saving:** designs save and open as JSON files (`~/.config/ender-pearl-controller/designs` by default).
+
+The designer draws through the Pi app's own canvas code (`pi/display/glass/canvas.py`), so the instructions are
+exactly what the display app would send. The preview uses the repo's own pictures and fonts, so it works without
+the Pi; Live and the other tabs need it.
 
 ## What it does
 - **Live**
@@ -53,6 +91,7 @@ from the Pi over SSH each time and never saved on the PC.
 | state | `GET /api/state` |
 | flash, probe, restore | `scp` + `pi/display/flash.py` over SSH |
 | bench | `systemctl --user stop ender-loop-display`, then `pi/display/bench.py` over SSH (stdin → display, replies as JSON lines) |
+| design live | the bench's batch mode: one JSON line per redraw, `{"batch": [instructions]}`, sent pipelined (6 in flight) |
 | service, log | `systemctl --user …`, `tail -F out/display.log` over SSH |
 
 All SSH commands share one connection (OpenSSH `ControlMaster`), so a command takes ~35 ms after the first.

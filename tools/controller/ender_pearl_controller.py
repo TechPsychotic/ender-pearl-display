@@ -24,6 +24,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
+import design_page  # noqa: E402
 import mirror  # noqa: E402
 import pi as P  # noqa: E402
 
@@ -106,6 +107,8 @@ class Window(Adw.ApplicationWindow):
         self.set_content(self.toasts)
 
         self.stack.add_titled_with_icon(self._live_page(), "live", "Live", "video-display-symbolic")
+        self.design = design_page.DesignPage(self)
+        self.stack.add_titled_with_icon(self.design, "design", "Design", "applications-graphics-symbolic")
         self.stack.add_titled_with_icon(self._flash_page(), "flash", "Flash", "system-software-install-symbolic")
         self.stack.add_titled_with_icon(self._bench_page(), "bench", "Bench", "utilities-terminal-symbolic")
         self.stack.add_titled_with_icon(self._service_page(), "service", "Service", "preferences-system-symbolic")
@@ -190,14 +193,14 @@ class Window(Adw.ApplicationWindow):
             return False
         return True
 
-    def confirm(self, heading, body, label, then, destructive=True):
+    def confirm(self, heading, body, label, then, destructive=True, cancel=None):
         d = Adw.AlertDialog(heading=heading, body=body)
         d.add_response("cancel", "Cancel")
         d.add_response("go", label)
         d.set_response_appearance("go", Adw.ResponseAppearance.DESTRUCTIVE if destructive else Adw.ResponseAppearance.SUGGESTED)
         d.set_default_response("cancel")
         d.set_close_response("cancel")
-        d.connect("response", lambda _d, r: then() if r == "go" else None)
+        d.connect("response", lambda _d, r: then() if r == "go" else cancel() if cancel else None)
         d.present(self)
 
     # ================================================================ Live
@@ -321,7 +324,11 @@ class Window(Adw.ApplicationWindow):
             bg(lambda: self.pi.knob(op, d), lambda _r: self._poll_frame(), lambda e: self.toast(e))
 
     def _key(self, _c, keyval, _code, state):
-        if self.stack.get_visible_child_name() != "live" or isinstance(self.get_focus(), (Gtk.Text, Gtk.Entry)):
+        if isinstance(self.get_focus(), (Gtk.Text, Gtk.Entry, Gtk.TextView, Gtk.SpinButton)):
+            return False
+        if self.stack.get_visible_child_name() == "design":
+            return self.design.key(keyval, state)
+        if self.stack.get_visible_child_name() != "live":
             return False
         k = Gdk.keyval_name(keyval)
         if k in ("Up", "Left"):
@@ -574,7 +581,7 @@ class Window(Adw.ApplicationWindow):
             self.confirm("Start the bench?", "The Ender Pearl screen stops while the bench runs: the display shows only what you send. "
                          "Stopping the bench starts the screen again.", "Start", self.start_bench, destructive=False)
 
-    def start_bench(self):
+    def start_bench(self, then=None, fail=None):
         self.bench_btn.set_sensitive(False)
         append(self.bench_log, "stopping the display service…\n")
 
@@ -588,7 +595,16 @@ class Window(Adw.ApplicationWindow):
             self.bench_btn.set_css_classes(["destructive-action"])
             self.bench_btn.set_sensitive(True)
             threading.Thread(target=self._bench_reader, args=(p,), daemon=True).start()
-        bg(work, ok, lambda e: (append(self.bench_log, f"{e}\n"), self.bench_btn.set_sensitive(True)))
+            if then:
+                GLib.timeout_add(1500, lambda: (then(), False)[1])   # the bench opens the link first
+
+        def bad(e):
+            append(self.bench_log, f"{e}\n")
+            self.bench_btn.set_sensitive(True)
+            self.toast(f"bench: {e}")
+            if fail:
+                fail()
+        bg(work, ok, bad)
 
     def _bench_reader(self, p):
         import json
@@ -598,6 +614,11 @@ class Window(Adw.ApplicationWindow):
             except ValueError:
                 GLib.idle_add(append, self.bench_log, line)
                 continue
+            if "batch" in m:
+                GLib.idle_add(self.design.batch_done, m)
+                GLib.idle_add(append, self.bench_log, f"[design] {m.get('batch')} commands, {m.get('ok')} ok, "
+                                                      f"{len(m.get('errors') or [])} errors, {m.get('ms')} ms\n")
+                continue
             if "ready" in m:
                 txt = f"display {'ready' if m['ready'] else 'NOT answering'} on {m.get('port')} at {m.get('baud')} baud\n"
             else:
@@ -606,6 +627,7 @@ class Window(Adw.ApplicationWindow):
                 txt = f"> {m.get('cmd')}\n  {reps}   ({m.get('ms')} ms)\n"
             GLib.idle_add(append, self.bench_log, txt)
         GLib.idle_add(append, self.bench_log, "bench ended\n")
+        GLib.idle_add(self.design.live_off)
 
     def bench_send(self, cmd):
         cmd = cmd.strip()
