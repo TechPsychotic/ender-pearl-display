@@ -28,6 +28,7 @@ KNOB_A, KNOB_B, KNOB_ENTER = 19, 26, 13
 FRAME = os.path.join(ROOT, "out", "display_frame.json")
 CONFIG = os.path.join(ROOT, "out", "display_config.json")   # the settings the server saves (ui/display_api.py)   # what the screen shows, for the web UI's live preview
 LONG_PRESS = 0.8
+INPUT_PORT = 47321     # remote knob (POST /api/display/input -> a datagram on 127.0.0.1; tools/controller)
 KNOB_DIR = 1           # knob direction (1 = as decoded: clockwise moves up a list; the user prefers it; -1 flips it)
 END = b"\xff\xff\xff"
 MANIFEST = json.load(open(os.path.join(HERE, "glass", "manifest.json")))
@@ -185,6 +186,34 @@ def frame_writer(canvas, app):
     threading.Thread(target=run, daemon=True).start()
 
 
+def remote_input():
+    """A localhost UDP socket for knob input from the web API (desktop controller). None if the port is taken."""
+    try:
+        rx = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        rx.bind(("127.0.0.1", INPUT_PORT))
+        rx.setblocking(False)
+        return rx
+    except OSError as e:
+        print("display: no remote input:", e, flush=True)
+        return None
+
+
+def remote_events(rx):
+    out = []
+    while rx:
+        try:
+            data = rx.recv(256)
+        except (BlockingIOError, OSError):
+            break
+        try:
+            m = json.loads(data)
+        except ValueError:
+            continue
+        if isinstance(m, dict):
+            out.append(m)
+    return out
+
+
 def saved_config(api):
     """The display settings (wallpaper, brightness, ...): from the server, or straight from its file while the server is
     still starting (both start at boot), so the screen comes back the way it was."""
@@ -228,6 +257,7 @@ def main():
     app.refresh()
     app.draw(full=True)
     frame_writer(canvas, app)
+    rx = remote_input()
     q = gpio.Quadrature()
     with gpio.Lines([KNOB_A, KNOB_B, KNOB_ENTER], pull="up", debounce_us=1000) as L:
         v = L.values(); q.feed(v[KNOB_A], v[KNOB_B])
@@ -245,6 +275,13 @@ def main():
                     if not long_fired:
                         app.on_press()
                     pressed_at = None
+            for m in remote_events(rx):   # the same as the knob: turn (+1 = next item / down), press, long press
+                if m.get("op") == "turn":
+                    app.on_turn(max(-5, min(5, int(m.get("d", 1)))))
+                elif m.get("op") == "press":
+                    app.on_press()
+                elif m.get("op") == "long":
+                    app.on_long_press()
             if pressed_at is not None and not long_fired and time.time() - pressed_at >= LONG_PRESS:
                 long_fired = True
                 app.on_long_press()

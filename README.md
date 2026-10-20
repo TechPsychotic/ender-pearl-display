@@ -31,6 +31,9 @@ in sync with a web UI that drives the printer.
 - **One source of truth:** every action goes through the same web API as the browser UI, so the screen, the browser
   and the printer always agree, and every safety check lives in one place.
 
+**Desktop controller:** a GNOME app on your PC mirrors the screen live, turns the knob, flashes firmware and runs a
+raw-command bench: [docs/08-controller.md](docs/08-controller.md).
+
 All 33 screens (rendered by the real app code): [docs/images/screens.png](docs/images/screens.png) ·
 wallpapers: [docs/images/wallpapers.png](docs/images/wallpapers.png)
 
@@ -75,6 +78,7 @@ Only new fonts or pictures need a firmware rebuild.
 | [server/](server/) | The display's web API (`display_api.py`, from the host project) and the systemd unit / installer |
 | [design/](design/) | Laptop side: wallpapers → pictures, boot animation, logo, icon font, font metrics, mockup renderer, menu spec |
 | [fonts/](fonts/) | The TJC font files (`.zi`) generated from Inter and our icon font |
+| [tools/controller/](tools/controller/) | **Desktop app** (GNOME): live mirror + knob, flash, raw-command bench, service and logs ([docs](docs/08-controller.md)) |
 | [tools/editor/](tools/editor/) | Running and scripting TJC's Windows editor under Wine on Linux |
 | [tests/](tests/) | Unit tests for the protocol builders, TJC driver and UI (no hardware needed) |
 

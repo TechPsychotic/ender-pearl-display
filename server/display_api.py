@@ -9,6 +9,8 @@
     GET  /api/display/wallpapers        wallpapers built into the display firmware (display/glass/manifest.json)
     GET  /api/display/frame             what the screen shows now: TJC drawing commands since the last full redraw
     GET  /api/display/asset?f=          a picture or font of the display (for the web UI's live preview)
+    POST /api/display/input             {"op": "turn", "d": ±1..5} | {"op": "press"} | {"op": "long"}: the knob, remotely
+                                        (desktop controller); forwarded to the display app on 127.0.0.1:INPUT_PORT
     POST /api/display/upload            {"name", "data": base64 image} -> queued for a firmware build on the laptop
     GET  /api/display/uploads           the build queue
 Previews are simplified to at most a few hundred short lines (drawn over the serial link). Parsing a large G-code file
@@ -46,7 +48,7 @@ def register(server_module, routes):
                    ("GET", "/api/display/model"): model, ("GET", "/api/display/objects"): objects,
                    ("GET", "/api/display/wallpapers"): lambda q, b: wallpapers(),
                    ("GET", "/api/display/frame"): lambda q, b: frame(), ("GET", "/api/display/asset"): asset,
-                   ("POST", "/api/display/upload"): upload, ("GET", "/api/display/uploads"): lambda q, b: uploads()})
+                   ("POST", "/api/display/upload"): upload, ("POST", "/api/display/input"): post_input, ("GET", "/api/display/uploads"): lambda q, b: uploads()})
     threading.Thread(target=_warm, daemon=True, name="preview-cache").start()
 
 
@@ -117,6 +119,27 @@ def get_config():
             return {**DEFAULTS, **json.load(f)}
     except (FileNotFoundError, ValueError):
         return dict(DEFAULTS)
+
+
+INPUT_PORT = 47321   # display/glass_main.py listens here (localhost only) for knob input from the API
+
+
+def post_input(q, body):
+    """The knob, from elsewhere (tools/controller): one turn / press / long press, sent to the display app as a datagram."""
+    import socket
+    req = json.loads(body or b"{}")
+    op = req.get("op")
+    if op not in ("turn", "press", "long"):
+        raise ValueError("op must be turn, press or long")
+    msg = {"op": op}
+    if op == "turn":
+        msg["d"] = max(-5, min(5, int(req.get("d", 1)))) or 1
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.sendto(json.dumps(msg).encode(), ("127.0.0.1", INPUT_PORT))
+    finally:
+        s.close()
+    return {"ok": True}
 
 
 def post_config(q, body):

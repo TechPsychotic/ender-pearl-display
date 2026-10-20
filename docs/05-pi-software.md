@@ -18,6 +18,7 @@
 | `pi/display/flash.py` | flash a `.tft` (or the stock one) over UART3 |
 | `pi/display/link.py` | find UART3's tty by device-tree address |
 | `pi/display/gpio.py` | GPIO through the kernel character device: knob inputs, quadrature decoder, an output (beeper test) |
+| `pi/display/bench.py` | raw TJC instructions from stdin, replies as JSON lines (the desktop controller's Bench; the display service must be stopped) |
 | `pi/display/tjc_hello.py` | first-light test for a fresh firmware: text, fills, a circle, a bar |
 | `pi/display/protocol.py`, `sniff.py`, `demo.py`, `gallery.py`, `ui.py` | the stock-protocol tools ([02](02-stock-protocol.md)) |
 
@@ -59,6 +60,9 @@ check lives in the server. Calls made by `glass_main.Api`:
 | `POST /api/print`, `/api/stop`, `/api/cmd`, `/api/printer` | start, stop, pause/resume, tune, motion, heaters, filament |
 | `GET/POST /api/queue`, `GET /api/settings`, `POST /api/calibrate`, `POST /api/filament` | queue, printer settings, calibration prints, loaded filament |
 | `GET/POST /api/display/config` | wallpaper, brightness, sleep time, clock, messages and "show" requests from the web UI |
+
+And towards the app: `POST /api/display/input` (`turn` ±n, `press`, `long`) reaches `glass_main.py` as a datagram on
+`127.0.0.1:47321` and works exactly like the real knob (the desktop controller uses it).
 
 `server/display_api.py` is the server side of the `/api/display/*` endpoints. It's taken from the host project and
 uses its internals (G-code plans, the jobs folder), so treat it as a reference implementation. To use the display with

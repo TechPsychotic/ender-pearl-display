@@ -8,3 +8,4 @@
 5. [Pi software](05-pi-software.md): files, knob, screens, the host API, the systemd service
 6. [Design and assets](06-design-and-assets.md): wallpapers, boot animation, logo, icon font, mockups, adding a wallpaper
 7. [Troubleshooting](07-troubleshooting.md): symptoms, causes, fixes
+8. [Desktop controller](08-controller.md): the GNOME app: live mirror and knob, flashing, bench, service
