@@ -61,7 +61,7 @@ def batch(s, cmds):
         nonlocal buf, got, ok
         deadline = time.time() + wait
         while True:
-            chunk = s.read(256)
+            chunk = s.read(s.in_waiting or 1)   # return as soon as a reply is there (read(256) waited out the timeout)
             if chunk:
                 buf += chunk
                 while END in buf:

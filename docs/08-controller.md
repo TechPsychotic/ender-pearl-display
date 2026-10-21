@@ -24,19 +24,49 @@ Make a screen for the printer from what is already in the display's firmware (no
   - Arrow keys nudge (Shift: 10 px), Delete removes, Ctrl+Z / Ctrl+Shift+Z undo and redo, Ctrl+D duplicates.
   - The list on the right orders them: later elements are drawn on top.
 - **Settings:** each element's position, size, text, font, colour (with the theme's colour presets), alignment,
-  and what is behind it. Text and icons blend with the panel or wallpaper behind them, chosen automatically.
+  and what is behind it. Text and icons blend with the panel, box or wallpaper behind them, chosen automatically.
+  Panels, filled boxes, progress bars, pictures and custom images have a **corner radius**. Corners are left
+  undrawn, so whatever is underneath shows through.
 - **Check:** the designer warns about what the display would do differently from what you'd expect:
   - text wider than its box (the display wraps it);
   - a box lower than its font;
   - characters a font doesn't have;
   - elements off the screen.
+- **Live data:** put `{nozzle}`, `{bed}`, `{progress}`, `{time_left}`, `{done_at}`, `{layer}`, `{layers}`, `{z}`, `{file}`,
+  `{state}`, `{filament}`, `{speed}`, `{flow}` or `{clock}` in any text ("Insert live data" lists them). Progress
+  bars can follow the print, the nozzle or bed heating, or the layer. Values come from the printer every few seconds;
+  with Live on, the display updates by itself. Without a connection, sample values are shown.
+- **3D print preview**, the element the printing screen uses:
+
+  ![Preview element](images/controller-design-preview.png)
+  - **File:** pick a G-code file, or follow the current print.
+  - **View:**
+    - *whole plate in 3D* (as on the file details screen), optionally shaded by height;
+    - *printed so far*: everything up to a layer in teal, the rest grey (the live preview while printing);
+    - *objects from above* (as on the skip-object screen).
+  - **Layer:** follow the print's current layer, or scrub with the slider to watch the print build up.
+  - **How it's made:** the Pi reads the G-code once, keeps the outer walls of every layer, projects them
+    isometrically into a small box and caches the result (`server/display_api.py`). The designer scales those
+    paths into your box, and the display draws them as 1-px lines.
+- **Custom rendering:** text in **any font installed on your PC** (or a `.ttf`/`.otf` file), and **any picture**
+  (PNG, JPG, …).
+
+  ![Custom font](images/controller-design-font.png)
+  - **How:** they're turned into pixels on the PC, then sent as rows of tiny filled boxes, the same way the
+    previews are sent as lines.
+  - **Text edges:** sharp, or smoothed in 2–4 steps blended with the colour behind.
+  - **Pictures:** reduced to 2–64 colours, with transparent parts left undrawn.
+  - **Cost:** a fill takes about 0.25 ms, so a large title is a fraction of a second and a 100 × 100 picture
+    about a second. Every element's **Check** box shows its command count and draw time, and warns when an
+    element is slow.
 - **Live on the printer:** switch it on and the real display redraws after every change, in about half a second
   for a typical screen. It works through the bench, so the Ender Pearl screen pauses until you switch Live off.
 - **What can the display do?** shows every icon and font as the display draws them, plus a plain-language list of
   the wallpapers, pictures, colours, shapes and limits, and what would need a new firmware.
 
   ![Capabilities](images/controller-capabilities.png)
-- **Templates:** header and card, big number, tile menu, splash. Each shows a technique you can copy.
+- **Templates:** header and card, big number, tile menu, splash, print status (live data and the 3D preview), and a
+  custom-font title. Each shows a technique you can copy.
 - **Commands:** the exact TJC instructions the screen sends, and the same screen as Python calls on the Pi app's
   canvas (`c.panel(…)`, `c.text(…)`), to paste into `pi/display/glass/app.py`.
 - **Saving:** designs save and open as JSON files (`~/.config/ender-pearl-controller/designs` by default).
@@ -92,6 +122,10 @@ from the Pi over SSH each time and never saved on the PC.
 | flash, probe, restore | `scp` + `pi/display/flash.py` over SSH |
 | bench | `systemctl --user stop ender-loop-display`, then `pi/display/bench.py` over SSH (stdin → display, replies as JSON lines) |
 | design live | the bench's batch mode: one JSON line per redraw, `{"batch": [instructions]}`, sent pipelined (6 in flight) |
+| design previews | `GET /api/display/model` / `preview` / `objects` at the sizes the Pi pre-builds, `GET /api/plan` for the layer count |
+
+Measured speed on the display at 921600 baud, pipelined: a 1-px-high `fill` takes 0.25 ms, a 40 × 40 picture copy 2 ms,
+a ~160-px line 2.4 ms, and a full-screen picture 62 ms.
 | service, log | `systemctl --user …`, `tail -F out/display.log` over SSH |
 
 All SSH commands share one connection (OpenSSH `ControlMaster`), so a command takes ~35 ms after the first.

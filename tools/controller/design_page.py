@@ -45,6 +45,8 @@ class DesignPage(Gtk.Box):
         self._building = False
         self._drag = None
         self._push_tid = None
+        self.ctx = {"data": None, "paths": {}}
+        self.files, self.layers, self._fetching = [], {}, set()
 
         self.append(self._toolbar())
         body = Gtk.Box(spacing=16, margin_top=10, margin_bottom=14, margin_start=18, margin_end=18, vexpand=True)
@@ -250,7 +252,8 @@ class DesignPage(Gtk.Box):
     # ================================================================ drawing
     def refresh(self, rebuild=False, props=False, labels=False):
         """Redraw the preview; rebuild the element list / settings when needed; send to the printer when live."""
-        img = self.mirror.render(D.frame(self.design)).resize((240 * SCALE, 320 * SCALE), 0)
+        self.ensure_paths()
+        img = self.mirror.render(D.frame(self.design, self.ctx)).resize((240 * SCALE, 320 * SCALE), 0)
         if self.sel is not None and self.sel < len(self.els):
             x, y, w, h = D.bbox(self.els[self.sel])
             d = ImageDraw.Draw(img)
@@ -288,6 +291,12 @@ class DesignPage(Gtk.Box):
             return f"{t}{' (focused)' if e['style'] == 'focus' else ''}"
         if e["type"] == "picture":
             return f"{t} · {e['picture']}"
+        if e["type"] == "preview":
+            return f"{t} · {D.VIEWS[e['view']].split(',')[0]}"
+        if e["type"] == "ctext":
+            return f"{t} · “{e['text'][:16]}”"
+        if e["type"] == "cimage":
+            return f"{t} · {os.path.basename(e['image_file']) or 'no file'}"
         return t
 
     def _fill_list(self):
@@ -297,8 +306,9 @@ class DesignPage(Gtk.Box):
         for i in range(len(self.els) - 1, -1, -1):   # topmost first
             e = self.els[i]
             row = Adw.ActionRow(title=GLib.markup_escape_text(self._title(e)), subtitle=f"{e['x']}, {e['y']} · {e['w']} × {e['h']}")
-            if D.warnings(e):
-                row.add_suffix(Gtk.Image(icon_name="dialog-warning-symbolic", tooltip_text="\n".join(D.warnings(e))))
+            ws = D.warnings(e, self.design, self.ctx)
+            if ws:
+                row.add_suffix(Gtk.Image(icon_name="dialog-warning-symbolic", tooltip_text="\n".join(ws)))
             row.idx = i
             self.list.append(row)
             if i == self.sel:
@@ -353,38 +363,46 @@ class DesignPage(Gtk.Box):
         g = Adw.PreferencesGroup(title="Look")
         if k == "panel":
             g.add(self._combo("Style", ["glass", "focus"], ["Glass", "Focused (lighter, teal edge)"], "style"))
-            r = Adw.SpinRow.new_with_range(0, 30, 1)
-            r.set_title("Corner radius")
-            r.set_value(e["radius"])
-            r.connect("notify::value", lambda row, _p: self.set_prop("radius", int(row.get_value())))
-            g.add(r)
             g.add(self._switch("Highlight line on top", "edge"))
-        if k == "text":
-            r = Adw.EntryRow(title="Text", text=e["text"])
+        if k in ("text", "ctext"):
+            r = Adw.EntryRow(title="Text  ·  {field} = live data", text=e["text"])
             r.connect("changed", lambda row: self.set_prop("text", row.get_text()))
             g.add(r)
+            g.add(self._insert_data(r))
+        if k == "text":
             g.add(self._combo("Font", D.FONT_ROLES, [D.FONT_TITLES[f] for f in D.FONT_ROLES], "font"))
+        if k == "ctext":
+            g.add(self._font_row())
+            g.add(self._spin("Size (px)", "size", 6, 200))
+            g.add(self._combo("Edges", [1, 2, 3, 4], ["Sharp (fewest commands)", "Smooth ×2", "Smooth ×3", "Smoothest"], "smooth"))
         if k == "icon":
             g.add(self._combo("Icon", D.ICON_NAMES, D.ICON_NAMES, "icon"))
             g.add(self._combo("Size", ["icon", "icon_s"], ["24 px", "18 px"], "size"))
         if k == "picture":
             pics = [p for p in D.MANIFEST["pictures"] if not p.endswith(("_bg.png", "_glass.png", "_focus.png"))]
             g.add(self._combo("Picture", pics, pics, "picture"))
-        if k in ("text", "icon", "bar", "rect", "line", "circle"):
-            g.add(self._color("Colour", "color"))
-        if k in ("text", "icon"):
-            if k == "text":
-                g.add(self._combo("Horizontal", D.ALIGN, ["Left", "Centre", "Right"], "align"))
-                g.add(self._combo("Vertical", D.VALIGN, ["Top", "Middle", "Bottom"], "valign"))
+        if k == "cimage":
+            g.add(self._file_row("Image", "image_file", "Images", ["*.png", "*.jpg", "*.jpeg", "*.webp", "*.bmp", "*.gif"]))
+            g.add(self._spin("Colours", "colors", 2, 64))
+        if k == "preview":
+            self._preview_rows(g, e)
+        if k in ("text", "ctext", "icon", "bar", "rect", "line", "circle"):
+            g.add(self._color("Colour" if k != "bar" else "Filled part", "color"))
+        if k == "bar":
+            g.add(self._color("Empty part", "track"))
+            g.add(self._combo("Value from", list(D.BAR_SOURCES), list(D.BAR_SOURCES.values()), "source", rebuild=True))
+            if e.get("source", "fixed") == "fixed":
+                g.add(self._spin("Value (%)", "value", 0, 100))
+        if k in D.ROUNDED:
+            g.add(self._spin("Corner radius", "radius", 0, 60))
+        if k in ("text", "ctext"):
+            g.add(self._combo("Horizontal", D.ALIGN, ["Left", "Centre", "Right"], "align"))
+        if k == "text":
+            g.add(self._combo("Vertical", D.VALIGN, ["Top", "Middle", "Bottom"], "valign"))
+        if k in ("text", "ctext", "icon"):
             g.add(self._combo("Behind it", D.UNDER, [D.UNDER_TITLES[u] for u in D.UNDER], "under", rebuild=True))
             if e.get("under") == "solid":
                 g.add(self._color("Solid colour", "solid"))
-        if k == "bar":
-            r = Adw.SpinRow.new_with_range(0, 100, 1)
-            r.set_title("Value (%)")
-            r.set_value(e["value"])
-            r.connect("notify::value", lambda row, _p: self.set_prop("value", int(row.get_value())))
-            g.add(r)
         if k == "circle":
             g.add(self._switch("Filled", "filled"))
         self.props_box.append(g)
@@ -393,6 +411,154 @@ class DesignPage(Gtk.Box):
         self.warn_rows = []
         self._building = False
         self._show_warnings()
+
+    def _spin(self, title, key, lo, hi):
+        r = Adw.SpinRow.new_with_range(lo, hi, 1)
+        r.set_title(title)
+        r.set_value(self.els[self.sel].get(key, lo))
+        r.connect("notify::value", lambda row, _p: self.set_prop(key, int(row.get_value())))
+        return r
+
+    def _insert_data(self, entry):
+        """A drop-down that inserts a {field} into the text (live printer data)."""
+        r = Adw.ActionRow(title="Insert live data", subtitle="Filled in from the printer (sample values when not connected)")
+        names = list(D.DATA_FIELDS)
+        dd = Gtk.DropDown.new_from_strings(["Choose…"] + [f"{D.DATA_FIELDS[n]}  {{{n}}}" for n in names])
+        dd.set_valign(Gtk.Align.CENTER)
+
+        def pick(d, _p):
+            i = d.get_selected()
+            if i > 0:
+                entry.set_text(entry.get_text() + "{" + names[i - 1] + "}")
+                d.set_selected(0)
+        dd.connect("notify::selected", pick)
+        r.add_suffix(dd)
+        return r
+
+    def _file_row(self, title, key, kind, patterns):
+        e = self.els[self.sel]
+        r = Adw.ActionRow(title=title, subtitle=os.path.basename(e.get(key) or "") or "none chosen")
+        b = Gtk.Button(label="Choose…", valign=Gtk.Align.CENTER)
+
+        def choose(*_a):
+            d = Gtk.FileDialog(title=f"Choose {title.lower()}")
+            f = Gtk.FileFilter(name=kind)
+            for pt in patterns:
+                f.add_pattern(pt)
+            store = Gio.ListStore.new(Gtk.FileFilter)
+            store.append(f)
+            d.set_filters(store)
+
+            def done(dlg, res):
+                try:
+                    self.set_prop(key, dlg.open_finish(res).get_path(), rebuild_props=True)
+                except GLib.Error:
+                    pass
+            d.open(self.win, None, done)
+        b.connect("clicked", choose)
+        r.add_suffix(b)
+        return r
+
+    def _font_row(self):
+        """Any font installed on this computer (searchable), or a font file."""
+        fonts = self._system_fonts()
+        e = self.els[self.sel]
+        r = Adw.ActionRow(title="Font", subtitle=os.path.basename(e.get("font_file") or "") or "Pillow's default")
+        labels = [n for n, _ in fonts]
+        dd = Gtk.DropDown.new_from_strings(["Installed fonts…"] + labels)
+        dd.set_enable_search(True)
+        dd.set_expression(Gtk.PropertyExpression.new(Gtk.StringObject, None, "string"))
+        dd.set_valign(Gtk.Align.CENTER)
+
+        def pick(d, _p):
+            i = d.get_selected()
+            if i > 0:
+                self.set_prop("font_file", fonts[i - 1][1], rebuild_props=True)
+        dd.connect("notify::selected", pick)
+        r.add_suffix(dd)
+        b = Gtk.Button(icon_name="document-open-symbolic", tooltip_text="A font file (.ttf / .otf)", valign=Gtk.Align.CENTER)
+        b.connect("clicked", lambda *_a: self._choose_font_file())
+        r.add_suffix(b)
+        return r
+
+    def _choose_font_file(self):
+        d = Gtk.FileDialog(title="Choose a font file")
+        f = Gtk.FileFilter(name="Fonts")
+        for pt in ("*.ttf", "*.otf", "*.ttc"):
+            f.add_pattern(pt)
+        store = Gio.ListStore.new(Gtk.FileFilter)
+        store.append(f)
+        d.set_filters(store)
+
+        def done(dlg, res):
+            try:
+                self.set_prop("font_file", dlg.open_finish(res).get_path(), rebuild_props=True)
+            except GLib.Error:
+                pass
+        d.open(self.win, None, done)
+
+    def _system_fonts(self):
+        if getattr(self, "_fonts", None) is None:
+            import subprocess
+            out = subprocess.run(["fc-list", ":", "family", "style", "file"], capture_output=True, text=True).stdout
+            seen = {}
+            for line in out.splitlines():
+                path, _, rest = line.partition(": ")
+                if not path.lower().endswith((".ttf", ".otf")):
+                    continue
+                fam = rest.split(":")[0].split(",")[0]
+                sty = rest.split("style=")[1].split(",")[0] if "style=" in rest else ""
+                seen.setdefault(f"{fam} {sty}".strip(), path)
+            self._fonts = sorted(seen.items())
+        return self._fonts
+
+    def _preview_rows(self, g, e):
+        files = ["", *self.files]
+        r = Adw.ComboRow(title="G-code file", model=Gtk.StringList.new(["The current print"] + self.files))
+        if e.get("file", "") in files:
+            r.set_selected(files.index(e.get("file", "")))
+        r.connect("notify::selected", lambda row, _p: self.set_prop("file", files[row.get_selected()]))
+        g.add(r)
+        g.add(self._combo("View", list(D.VIEWS), list(D.VIEWS.values()), "view", rebuild=True))
+        if e["view"] == "layers":
+            sw = Adw.SwitchRow(title="Follow the print's current layer", active=int(e.get("layer", -1)) < 0)
+            sw.connect("notify::active", lambda row, _p: self.set_prop("layer", -1 if row.get_active() else 0, rebuild_props=True))
+            g.add(sw)
+            if int(e.get("layer", -1)) >= 0:
+                hi = self.layer_count(e)
+                sc = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, max(1, hi - 1), 1)
+                sc.set_value(e["layer"])
+                sc.set_hexpand(True)
+                sc.set_draw_value(True)
+                sc.set_digits(0)
+                sc.connect("value-changed", lambda w: self._debounced_layer(int(w.get_value())))
+                lr = Adw.ActionRow(title="Layer", subtitle=f"of {hi}" if hi else "")
+                lr.add_suffix(sc)
+                g.add(lr)
+            g.add(self._color("Printed", "done"))
+            g.add(self._color("Still to print", "todo"))
+        if e["view"] == "plate":
+            g.add(self._switch("Shade by height (darker low, brighter high)", "shade"))
+            if not e.get("shade"):
+                g.add(self._color("Colour", "done"))
+        if e["view"] == "objects":
+            g.add(self._color("Outline colour", "done"))
+        g.add(Adw.ActionRow(title="How it works", subtitle="The Pi builds these from the G-code (walls of every layer, "
+                            "turned into an isometric view) and caches them; here they're scaled into the box and drawn as lines."))
+
+    def _debounced_layer(self, n):
+        if getattr(self, "_layer_tid", None):
+            GLib.source_remove(self._layer_tid)
+
+        def fire():
+            self._layer_tid = None
+            self.set_prop("layer", n)
+            return False
+        self._layer_tid = GLib.timeout_add(120, fire)
+
+    def layer_count(self, e):
+        f = e.get("file") or (self.ctx.get("data") or {}).get("_job")
+        return self.layers.get(f, 0)
 
     def _combo(self, title, values, labels, key, rebuild=False):
         r = Adw.ComboRow(title=title, model=Gtk.StringList.new(labels))
@@ -431,9 +597,13 @@ class DesignPage(Gtk.Box):
             return
         for r in self.warn_rows:
             self.warn_group.remove(r)
-        ws = D.warnings(self.els[self.sel])
+        ws = D.warnings(self.els[self.sel], self.design, self.ctx)
+        cmds = D.element_commands(self.design, self.sel, self.ctx)
+        cost = Adw.ActionRow(title=f"{len(cmds)} drawing command{'s' if len(cmds) != 1 else ''}",
+                             subtitle=f"about {D.estimate_ms(cmds):.0f} ms on the display")
         self.warn_rows = [Adw.ActionRow(title=GLib.markup_escape_text(w), css_classes=["warning"]) for w in ws] or \
                          [Adw.ActionRow(title="Looks fine on the display", subtitle="Nothing gets cut or wrapped")]
+        self.warn_rows.append(cost)
         for r in self.warn_rows:
             self.warn_group.add(r)
 
@@ -557,7 +727,11 @@ class DesignPage(Gtk.Box):
             return
         self.inflight, self.pending = True, False
         self.batch_id += 1
-        cmds = D.commands(self.design)
+        cmds = D.commands(self.design, self.ctx)
+        if cmds == getattr(self, "_last_pushed", None) and not getattr(self, "_force", False):
+            self.inflight = False
+            return
+        self._last_pushed = cmds
         try:
             self.win.bench.stdin.write(json.dumps({"batch": cmds, "id": self.batch_id}) + "\n")
             self.win.bench.stdin.flush()
@@ -611,8 +785,64 @@ class DesignPage(Gtk.Box):
             self.refresh(rebuild=True)
         d.open(self.win, None, done)
 
+    def set_state(self, st):
+        """Printer state from the window's poll: live data for {fields}, bars and 'follow the print' previews."""
+        data = D.data_from_state(st)
+        old = self.ctx.get("data")
+        self.ctx["data"] = data
+        if not self.files and not getattr(self, "_files_asked", False):
+            self._files_asked = True
+            self.win_bg(lambda: self.win.pi.api("GET", "/api/display/files")["files"], self._got_files)
+        uses = any(e["type"] in ("text", "ctext") and "{" in str(e["text"]) or e["type"] == "bar" and e.get("source", "fixed") != "fixed"
+                   or e["type"] == "preview" for e in self.els)
+        if uses and (old is None or {k: v for k, v in old.items() if k != "clock"} != {k: v for k, v in data.items() if k != "clock"}
+                     or old.get("clock") != data.get("clock")):
+            self.refresh(labels=True)
+
+    def _got_files(self, files):
+        self.files = [f["name"] for f in files]
+        if self.sel is not None and self.sel < len(self.els) and self.els[self.sel]["type"] == "preview":
+            self.refresh(props=True)
+
+    def win_bg(self, fn, done):
+        import threading
+
+        def run():
+            try:
+                r = fn()
+            except Exception as e:   # noqa: BLE001
+                GLib.idle_add(self.win.toast, str(e))
+                return
+            GLib.idle_add(done, r)
+        threading.Thread(target=run, daemon=True).start()
+
+    def ensure_paths(self):
+        """Fetch the pre-built preview paths the preview elements need (once each)."""
+        if not self.win.connected:
+            return
+        for e in self.els:
+            if e["type"] != "preview":
+                continue
+            key = D.preview_key(e, self.ctx.get("data"))
+            view, f, layer = key
+            if not f or key in self.ctx["paths"] or key in self._fetching:
+                continue
+            self._fetching.add(key)
+            q = "name=" + GLib.uri_escape_string(f, None, False)
+            path = {"plate": f"/api/display/model?{q}&w=204&h=88", "objects": f"/api/display/objects?{q}&w=204&h=150",
+                    "layers": f"/api/display/preview?{q}&n={max(0, layer)}&w=98&h=70"}[view]
+
+            def got(r, key=key, f=f):
+                self._fetching.discard(key)
+                self.ctx["paths"][key] = r.get("objects") if key[0] == "objects" else r.get("paths")
+                if f not in self.layers:
+                    self.win_bg(lambda: self.win.pi.api("GET", "/api/plan?name=" + GLib.uri_escape_string(f, None, False), timeout=60),
+                                lambda plan: (self.layers.__setitem__(f, int(plan.get("layers") or 0)), self.refresh(props=True)))
+                self.refresh(labels=True)
+            self.win_bg(lambda path=path: self.win.pi.api("GET", path, timeout=60), got)
+
     def show_commands(self):
-        cmds = D.commands(self.design)
+        cmds = D.commands(self.design, self.ctx)
         tjc, py = "\n".join(cmds), D.python_code(self.design)
         stack = Adw.ViewStack()
         for name, title, text in (("tjc", f"TJC instructions ({len(cmds)})", tjc), ("py", "Python for the Pi app", py)):

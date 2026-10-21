@@ -161,6 +161,7 @@ class Window(Adw.ApplicationWindow):
             self.status.set_label(f"{self.cfg['host']} · {'printing' if state.get('printing') else 'idle'}")
             self.toast(f"Connected to {self.cfg['host']}")
             self.load_display_config()
+            self.design.set_state(state)
             self.refresh_service()
             self._page_changed()
 
@@ -374,6 +375,7 @@ class Window(Adw.ApplicationWindow):
     def _poll_state(self):
         def ok(st):
             self.state = st
+            self.design.set_state(st)
             s = st.get("status") or {}
             if st.get("printing"):
                 pct = 100 * s.get("sent", 0) / s["total"] if s.get("total") else 0
