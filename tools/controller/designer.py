@@ -275,7 +275,7 @@ def custom_image_runs(e):
     from PIL import Image
     f = e["image_file"]
     if not f or not os.path.exists(f):
-        return []
+        return [], (0, 0, 0, 0)
     key = ("i", f, os.path.getmtime(f), e["w"], e["h"], e["colors"])
     if key in _RUNS:
         return _RUNS[key]
@@ -283,11 +283,12 @@ def custom_image_runs(e):
     w, h = max(1, int(e["w"])), max(1, int(e["h"]))
     im.thumbnail((w, h), Image.LANCZOS)                      # fit inside the box, keep proportions
     canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-    canvas.paste(im, ((w - im.width) // 2, (h - im.height) // 2))
+    placed = ((w - im.width) // 2, (h - im.height) // 2, im.width, im.height)   # where the picture really is
+    canvas.paste(im, placed[:2])
     alpha = canvas.getchannel("A").point(lambda a: 255 if a >= 128 else 0)
     rgb = canvas.convert("RGB").quantize(colors=max(2, min(64, int(e["colors"]))), method=Image.Quantize.MEDIANCUT,
                                          dither=Image.Dither.NONE).convert("RGB")
-    runs = _runs_from(rgb, alpha)
+    runs = _runs_from(rgb, alpha), placed
     _RUNS[key] = runs
     return runs
 
@@ -416,8 +417,9 @@ def commands(design, ctx=None):
             for rx, ry, rw, col in custom_text_runs(e, _under_rgb(e, els, i, design.get("wallpaper")), data):
                 c._send(f"fill {x + rx},{y + ry},{rw},1,{col}")
         elif k == "cimage":
-            rb = rounded_blocks(0, 0, w, h, e.get("radius", 0))
-            for rx, ry, rw, col in custom_image_runs(e):
+            runs, placed = custom_image_runs(e)
+            rb = rounded_blocks(*placed, e.get("radius", 0))   # round the picture itself, not the empty box around it
+            for rx, ry, rw, col in runs:
                 if int(e.get("radius", 0)) > 0:   # clip each run to the rounded rectangle's row
                     row = next(((bx, bw) for bx, by, bw, bh in rb if by <= ry < by + bh), None)
                     if not row:
